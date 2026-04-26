@@ -17,7 +17,7 @@ pipeline {
     TF_IN_AUTOMATION = 'true'
     TF_INPUT = '0'
     AWS_DEFAULT_REGION = 'eu-north-1'
-    TERRAFORM_VERSION = '1.8.13'
+    TERRAFORM_VERSION = '1.8.5'
   }
 
   stages {
