@@ -16,6 +16,23 @@ This file describes how to run Terraform/Ansible labs through Jenkins in a singl
 - Docker available and running.
 - AWS credentials configured for Jenkins agent user (or injected by your Jenkins credentials workflow).
 
+## 2.1) AWS Credentials for Jenkins
+
+For Terraform AWS labs, Jenkins must provide AWS credentials.
+You can use Jenkins credentials of type **Secret text** for:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN` (optional)
+
+Then set the corresponding pipeline parameters:
+
+- `AWS_ACCESS_KEY_ID_CRED`
+- `AWS_SECRET_ACCESS_KEY_CRED`
+- `AWS_SESSION_TOKEN_CRED`
+
+If credentials are not provided, Terraform will still run, but AWS provider actions will fail unless the agent already has valid AWS access.
+
 ## 3) Run Parameters
 
 - `TERRAFORM_LAB`: lab folder (`lab-00` ... `lab-05`).

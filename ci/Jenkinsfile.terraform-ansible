@@ -11,6 +11,9 @@ pipeline {
     choice(name: 'TF_ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action')
     booleanParam(name: 'RUN_ANSIBLE', defaultValue: false, description: 'Run Ansible checks/deploy after Terraform stage')
     choice(name: 'ANSIBLE_ACTION', choices: ['syntax', 'tasks', 'inventory', 'deploy'], description: 'Ansible action from ansible-docker.ps1')
+    string(name: 'AWS_ACCESS_KEY_ID_CRED', defaultValue: '', description: 'Jenkins credential ID for AWS access key id (optional)')
+    string(name: 'AWS_SECRET_ACCESS_KEY_CRED', defaultValue: '', description: 'Jenkins credential ID for AWS secret access key (optional)')
+    string(name: 'AWS_SESSION_TOKEN_CRED', defaultValue: '', description: 'Jenkins credential ID for AWS session token (optional)')
   }
 
   environment {
@@ -30,38 +33,59 @@ pipeline {
     stage('Terraform Init') {
       steps {
         dir("terraform/${params.TERRAFORM_LAB}") {
-          sh '''
-            set -e
-            if [ ! -x "${WORKSPACE}/.terraform-bin/terraform" ]; then
-              os=$(uname | tr '[:upper:]' '[:lower:]')
-              arch=$(uname -m)
-              case "$arch" in
-                x86_64) arch=amd64 ;;
-                aarch64|arm64) arch=arm64 ;;
-                *) echo "Unsupported architecture: $arch" ; exit 1 ;;
-              esac
+          script {
+            def awsCreds = []
+            if (params.AWS_ACCESS_KEY_ID_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_ACCESS_KEY_ID_CRED, variable: 'AWS_ACCESS_KEY_ID')
+            }
+            if (params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SECRET_ACCESS_KEY_CRED, variable: 'AWS_SECRET_ACCESS_KEY')
+            }
+            if (params.AWS_SESSION_TOKEN_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SESSION_TOKEN_CRED, variable: 'AWS_SESSION_TOKEN')
+            }
 
-              mkdir -p "${WORKSPACE}/.terraform-bin"
-              if command -v curl >/dev/null 2>&1; then
-                curl -L -o "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
-              elif command -v wget >/dev/null 2>&1; then
-                wget -O "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
-              else
-                echo "Need curl or wget to install Terraform"
-                exit 1
+            def initScript = '''
+              set -e
+              if [ ! -x "${WORKSPACE}/.terraform-bin/terraform" ]; then
+                os=$(uname | tr '[:upper:]' '[:lower:]')
+                arch=$(uname -m)
+                case "$arch" in
+                  x86_64) arch=amd64 ;;
+                  aarch64|arm64) arch=arm64 ;;
+                  *) echo "Unsupported architecture: $arch" ; exit 1 ;;
+                esac
+
+                mkdir -p "${WORKSPACE}/.terraform-bin"
+                if command -v curl >/dev/null 2>&1; then
+                  curl -L -o "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+                elif command -v wget >/dev/null 2>&1; then
+                  wget -O "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+                else
+                  echo "Need curl or wget to install Terraform"
+                  exit 1
+                fi
+                if [ ! -f "${WORKSPACE}/terraform.zip" ] || [ ! -s "${WORKSPACE}/terraform.zip" ]; then
+                  echo "Terraform archive download failed"
+                  ls -l "${WORKSPACE}/terraform.zip" || true
+                  cat "${WORKSPACE}/terraform.zip" | head -n 20 || true
+                  exit 1
+                fi
+                unzip -o "${WORKSPACE}/terraform.zip" -d "${WORKSPACE}/.terraform-bin"
+                rm -f "${WORKSPACE}/terraform.zip"
               fi
-              if [ ! -f "${WORKSPACE}/terraform.zip" ] || [ ! -s "${WORKSPACE}/terraform.zip" ]; then
-                echo "Terraform archive download failed"
-                ls -l "${WORKSPACE}/terraform.zip" || true
-                cat "${WORKSPACE}/terraform.zip" | head -n 20 || true
-                exit 1
-              fi
-              unzip -o "${WORKSPACE}/terraform.zip" -d "${WORKSPACE}/.terraform-bin"
-              rm -f "${WORKSPACE}/terraform.zip"
-            fi
-            export PATH="${WORKSPACE}/.terraform-bin:$PATH"
-            terraform init -input=false
-          '''
+              export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              terraform init -input=false
+            '''
+
+            if (awsCreds) {
+              withCredentials(awsCreds) {
+                sh initScript
+              }
+            } else {
+              sh initScript
+            }
+          }
         }
       }
     }
@@ -73,18 +97,29 @@ pipeline {
       steps {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
-            if (params.TF_ACTION == 'destroy') {
-              sh '''
-                set -e
-                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
-                terraform plan -destroy -out=tfplan
-              '''
+            def awsCreds = []
+            if (params.AWS_ACCESS_KEY_ID_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_ACCESS_KEY_ID_CRED, variable: 'AWS_ACCESS_KEY_ID')
+            }
+            if (params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SECRET_ACCESS_KEY_CRED, variable: 'AWS_SECRET_ACCESS_KEY')
+            }
+            if (params.AWS_SESSION_TOKEN_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SESSION_TOKEN_CRED, variable: 'AWS_SESSION_TOKEN')
+            }
+
+            def planScript = '''
+              set -e
+              export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              terraform plan -out=tfplan
+            '''
+
+            if (awsCreds) {
+              withCredentials(awsCreds) {
+                sh planScript
+              }
             } else {
-              sh '''
-                set -e
-                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
-                terraform plan -out=tfplan
-              '''
+              sh planScript
             }
           }
         }
@@ -99,18 +134,42 @@ pipeline {
         input message: "Approve ${params.TF_ACTION} for ${params.TERRAFORM_LAB}?", ok: 'Proceed'
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
-            if (params.TF_ACTION == 'destroy') {
-              sh '''
-                set -e
-                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
-                terraform destroy -auto-approve
-              '''
+            def awsCreds = []
+            if (params.AWS_ACCESS_KEY_ID_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_ACCESS_KEY_ID_CRED, variable: 'AWS_ACCESS_KEY_ID')
+            }
+            if (params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SECRET_ACCESS_KEY_CRED, variable: 'AWS_SECRET_ACCESS_KEY')
+            }
+            if (params.AWS_SESSION_TOKEN_CRED?.trim()) {
+              awsCreds << string(credentialsId: params.AWS_SESSION_TOKEN_CRED, variable: 'AWS_SESSION_TOKEN')
+            }
+
+            def applyScript = '''
+              set -e
+              export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              terraform apply -auto-approve tfplan
+            '''
+            def destroyScript = '''
+              set -e
+              export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              terraform destroy -auto-approve
+            '''
+
+            if (awsCreds) {
+              withCredentials(awsCreds) {
+                if (params.TF_ACTION == 'destroy') {
+                  sh destroyScript
+                } else {
+                  sh applyScript
+                }
+              }
             } else {
-              sh '''
-                set -e
-                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
-                terraform apply -auto-approve tfplan
-              '''
+              if (params.TF_ACTION == 'destroy') {
+                sh destroyScript
+              } else {
+                sh applyScript
+              }
             }
           }
         }
