@@ -33,15 +33,6 @@ pipeline {
           sh '''
             set -e
             if [ ! -x "${WORKSPACE}/.terraform-bin/terraform" ]; then
-              if command -v curl >/dev/null 2>&1; then
-                DOWNLOADER="curl -Lo"
-              elif command -v wget >/dev/null 2>&1; then
-                DOWNLOADER="wget -O"
-              else
-                echo "Need curl or wget to install Terraform"
-                exit 1
-              fi
-
               os=$(uname | tr '[:upper:]' '[:lower:]')
               arch=$(uname -m)
               case "$arch" in
@@ -51,7 +42,20 @@ pipeline {
               esac
 
               mkdir -p "${WORKSPACE}/.terraform-bin"
-              ${DOWNLOADER} "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+              if command -v curl >/dev/null 2>&1; then
+                curl -L -o "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+              elif command -v wget >/dev/null 2>&1; then
+                wget -O "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+              else
+                echo "Need curl or wget to install Terraform"
+                exit 1
+              fi
+              if [ ! -f "${WORKSPACE}/terraform.zip" ] || [ ! -s "${WORKSPACE}/terraform.zip" ]; then
+                echo "Terraform archive download failed"
+                ls -l "${WORKSPACE}/terraform.zip" || true
+                cat "${WORKSPACE}/terraform.zip" | head -n 20 || true
+                exit 1
+              fi
               unzip -o "${WORKSPACE}/terraform.zip" -d "${WORKSPACE}/.terraform-bin"
               rm -f "${WORKSPACE}/terraform.zip"
             fi
