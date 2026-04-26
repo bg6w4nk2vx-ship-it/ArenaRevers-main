@@ -17,6 +17,7 @@ pipeline {
     TF_IN_AUTOMATION = 'true'
     TF_INPUT = '0'
     AWS_DEFAULT_REGION = 'eu-north-1'
+    TERRAFORM_VERSION = '1.8.13'
   }
 
   stages {
@@ -29,7 +30,34 @@ pipeline {
     stage('Terraform Init') {
       steps {
         dir("terraform/${params.TERRAFORM_LAB}") {
-          sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light init -input=false'
+          sh '''
+            set -e
+            if [ ! -x "${WORKSPACE}/.terraform-bin/terraform" ]; then
+              if command -v curl >/dev/null 2>&1; then
+                DOWNLOADER="curl -Lo"
+              elif command -v wget >/dev/null 2>&1; then
+                DOWNLOADER="wget -O"
+              else
+                echo "Need curl or wget to install Terraform"
+                exit 1
+              fi
+
+              os=$(uname | tr '[:upper:]' '[:lower:]')
+              arch=$(uname -m)
+              case "$arch" in
+                x86_64) arch=amd64 ;;
+                aarch64|arm64) arch=arm64 ;;
+                *) echo "Unsupported architecture: $arch" ; exit 1 ;;
+              esac
+
+              mkdir -p "${WORKSPACE}/.terraform-bin"
+              ${DOWNLOADER} "${WORKSPACE}/terraform.zip" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+              unzip -o "${WORKSPACE}/terraform.zip" -d "${WORKSPACE}/.terraform-bin"
+              rm -f "${WORKSPACE}/terraform.zip"
+            fi
+            export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+            terraform init -input=false
+          '''
         }
       }
     }
@@ -42,9 +70,17 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             if (params.TF_ACTION == 'destroy') {
-              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light plan -destroy -out=tfplan'
+              sh '''
+                set -e
+                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+                terraform plan -destroy -out=tfplan
+              '''
             } else {
-              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light plan -out=tfplan'
+              sh '''
+                set -e
+                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+                terraform plan -out=tfplan
+              '''
             }
           }
         }
@@ -60,9 +96,17 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             if (params.TF_ACTION == 'destroy') {
-              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light destroy -auto-approve'
+              sh '''
+                set -e
+                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+                terraform destroy -auto-approve
+              '''
             } else {
-              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light apply -auto-approve tfplan'
+              sh '''
+                set -e
+                export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+                terraform apply -auto-approve tfplan
+              '''
             }
           }
         }
