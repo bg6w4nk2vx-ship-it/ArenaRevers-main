@@ -1,0 +1,71 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'ersinnesipbek2003@gmail.com'
+  smtp_auth_username: 'ersinnesipbek2003@gmail.com'
+  smtp_auth_password: 'flsx tvln ycyb iczr'
+  smtp_require_tls: true
+
+route:
+  receiver: notify-default
+  group_by: ['alertname', 'instance']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 5m
+  routes:
+    - receiver: notify-critical
+      matchers:
+        - severity="critical"
+
+receivers:
+  - name: notify-default
+    email_configs:
+      - to: 'ersinnesipbek2003@gmail.com'
+        send_resolved: true
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        html: |
+          <h2>[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}</h2>
+          {{ range .Alerts }}
+          <p><b>Сервис:</b> {{ .Labels.instance }}<br>
+          <b>Қысқаша:</b> {{ .Annotations.summary }}<br>
+          <b>Сипаттама:</b> {{ .Annotations.description }}</p>
+          {{ end }}
+    telegram_configs:
+      - bot_token: '8763644385:AAEwXob1_nxTB-7vPiwKG44lSZsGfWqFe7s'
+        chat_id: 1644795911
+        parse_mode: 'HTML'
+        send_resolved: true
+        message: |
+          <b>[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}</b>
+          {{ range .Alerts }}
+          Сервис: {{ .Labels.instance }}
+          Қысқаша: {{ .Annotations.summary }}
+          Сипаттама: {{ .Annotations.description }}
+          {{ end }}
+
+  - name: notify-critical
+    email_configs:
+      - to: 'ersinnesipbek2003@gmail.com'
+        send_resolved: true
+        headers:
+          Subject: '[КРИТИКАЛЫҚ] {{ .CommonLabels.alertname }} — {{ .CommonLabels.instance }}'
+        html: |
+          <h2 style="color:red">КРИТИКАЛЫҚ [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}</h2>
+          {{ range .Alerts }}
+          <p><b>Сервис:</b> {{ .Labels.instance }}<br>
+          <b>Қысқаша:</b> {{ .Annotations.summary }}<br>
+          <b>Сипаттама:</b> {{ .Annotations.description }}</p>
+          {{ end }}
+    telegram_configs:
+      - bot_token: '8763644385:AAEwXob1_nxTB-7vPiwKG44lSZsGfWqFe7s'
+        chat_id: 1644795911
+        parse_mode: 'HTML'
+        send_resolved: true
+        message: |
+          <b>КРИТИКАЛЫҚ [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}</b>
+          {{ range .Alerts }}
+          Сервис: {{ .Labels.instance }}
+          Қысқаша: {{ .Annotations.summary }}
+          Сипаттама: {{ .Annotations.description }}
+          {{ end }}

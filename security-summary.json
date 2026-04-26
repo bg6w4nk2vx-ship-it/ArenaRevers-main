@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-04-11T05:13:57.319Z",
+  "inputs": {
+    "semgrep_path": "semgrep.json",
+    "npm_audit_path": "npm-audit.json",
+    "semgrep_loaded": false,
+    "npm_audit_loaded": false
+  },
+  "totals": {
+    "findings": 0,
+    "by_severity": {
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MODERATE": 0,
+      "MEDIUM": 0,
+      "LOW": 0,
+      "UNKNOWN": 0
+    },
+    "risk_score": 0
+  },
+  "suggestion": {
+    "suggested_decision": "ALLOW_DEPLOY",
+    "rationale": "No critical findings and low aggregate risk."
+  },
+  "findings": []
+}

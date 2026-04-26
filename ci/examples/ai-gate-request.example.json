@@ -1,0 +1,35 @@
+{
+  "repo": "arenareserve",
+  "branch": "main",
+  "commit": "abc123def",
+  "build_url": "https://jenkins.example/job/arenareserve/101/",
+  "security_summary": {
+    "generated_at": "2026-04-11T11:10:00.000Z",
+    "totals": {
+      "findings": 4,
+      "by_severity": {
+        "CRITICAL": 0,
+        "HIGH": 1,
+        "MODERATE": 2,
+        "MEDIUM": 0,
+        "LOW": 1,
+        "UNKNOWN": 0
+      },
+      "risk_score": 31
+    },
+    "suggestion": {
+      "suggested_decision": "ALLOW_DEPLOY",
+      "rationale": "No critical findings and low aggregate risk."
+    },
+    "findings": [
+      {
+        "source": "semgrep",
+        "rule_id": "javascript.lang.security.audit.detect-eval-with-expression.detect-eval-with-expression",
+        "severity": "HIGH",
+        "message": "Detected eval() with non-literal argument",
+        "path": "backend/src/example.js",
+        "line": 22
+      }
+    ]
+  }
+}

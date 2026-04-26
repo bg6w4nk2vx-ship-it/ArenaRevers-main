@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: ArenaReserve Dashboards
+    orgId: 1
+    folder: ArenaReserve
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/dashboards

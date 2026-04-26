@@ -1,0 +1,10 @@
+---
+- name: Provision and deploy ArenaReserve
+  hosts: app_servers
+  become: true
+  vars:
+    compose_file: "{{ compose_file_map[app_env] | default('docker-compose.yml') }}"
+
+  roles:
+    - role: docker_engine
+    - role: app_deploy

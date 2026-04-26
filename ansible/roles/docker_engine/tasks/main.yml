@@ -1,0 +1,73 @@
+---
+- name: Resolve Docker repository architecture
+  ansible.builtin.set_fact:
+    docker_repo_arch: "{{ arch_map.get(ansible_facts.architecture, 'amd64') }}"
+  vars:
+    arch_map:
+      x86_64: amd64
+      aarch64: arm64
+      armv7l: armhf
+  when: ansible_facts.os_family == "Debian"
+
+- name: Install apt packages for Docker setup
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - git
+    update_cache: true
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: ansible_facts.os_family == "Debian"
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+  when: ansible_facts.os_family == "Debian"
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ docker_repo_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}
+      {{ ansible_facts.distribution_release }} stable
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+
+- name: Install Docker engine and compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    update_cache: true
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+- name: Ensure Docker service is enabled and running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  when: ansible_facts.os_family == "Debian"
+
+- name: Ensure deploy user is in docker group
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    groups: docker
+    append: true
+  when: ansible_facts.os_family == "Debian"

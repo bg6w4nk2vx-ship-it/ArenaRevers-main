@@ -1,0 +1,47 @@
+groups:
+  - name: host-critical-alerts
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сервис қолжетімсіз: {{ $labels.instance }}"
+          description: "{{ $labels.job }} сервисі {{ $labels.instance }} адресінде 2 минуттан артық уақыт қолжетімсіз."
+
+      - alert: HostHighCPU
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU жүктемесі жоғары: {{ $labels.instance }}"
+          description: "CPU жүктемесі 5 минут бойы 85%-дан жоғары. Ағымдағы мән: {{ printf \"%.2f\" $value }}%."
+
+      - alert: HostHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Жедел жады жүктемесі жоғары: {{ $labels.instance }}"
+          description: "Жедел жады қолданылуы 5 минут бойы 90%-дан жоғары. Ағымдағы мән: {{ printf \"%.2f\" $value }}%."
+
+      - alert: HostDiskAlmostFull
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/"})) * 100 > 90
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Диск толуға жақын: {{ $labels.instance }}"
+          description: "Түбірлік диск қолданылуы 10 минут бойы 90%-дан жоғары. Ағымдағы мән: {{ printf \"%.2f\" $value }}%."
+
+      - alert: ArenaBackendUnavailable
+        expr: probe_success{job="arena-backend-probe"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Arena API қолжетімсіз"
+          description: "backend:3000/health endpoint-і жауап бермей тұр. Жоба серверін тексеріңіз."

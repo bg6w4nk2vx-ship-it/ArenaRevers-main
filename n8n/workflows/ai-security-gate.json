@@ -1,0 +1,206 @@
+{
+  "name": "AI Security Gate",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "ai-security-gate",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "Webhook_Receive",
+      "name": "Webhook Receive",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tokenHeader = $json.headers && ($json.headers['x-ai-gate-token'] || $json.headers['X-AI-GATE-TOKEN']);\nconst expected = $env.N8N_AI_GATE_TOKEN || '';\nif (expected && tokenHeader !== expected) {\n  return [{ json: { unauthorized: true, message: 'Invalid gate token' } }];\n}\n\nconst body = $json.body || $json;\nconst summary = body.security_summary || {};\nconst prompt = [\n  'You are a DevSecOps AI Gate.',\n  'Return STRICT JSON only. No markdown.',\n  'Output fields: decision, risk_score, reasons, must_fix.',\n  'Allowed decisions: ALLOW_DEPLOY, MANUAL_REVIEW, BLOCK_DEPLOY.',\n  'Rules:',\n  '- BLOCK_DEPLOY if critical findings exist or risk >= 70.',\n  '- MANUAL_REVIEW for risk 40-69.',\n  '- ALLOW_DEPLOY for risk < 40 and no critical findings.',\n  'Input summary JSON:',\n  JSON.stringify(summary)\n].join('\\n');\n\nreturn [{\n  json: {\n    unauthorized: false,\n    repo: body.repo || 'unknown',\n    branch: body.branch || 'unknown',\n    commit: body.commit || 'unknown',\n    prompt\n  }\n}];"
+      },
+      "id": "Code_Prepare",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.unauthorized}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "If_Unauthorized",
+      "name": "Unauthorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "responseBody": "={{ {\"error\": \"unauthorized\", \"message\": $json.message } }}"
+      },
+      "id": "Respond_401",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        980,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $env.OPENAI_MODEL || \"gpt-4o-mini\", \"temperature\": 0, \"messages\": [ { \"role\": \"system\", \"content\": \"You are a strict JSON API.\" }, { \"role\": \"user\", \"content\": $json.prompt } ] } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "HTTP_LLM",
+      "name": "Call LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function safeDefault(reason) {\n  return {\n    decision: 'MANUAL_REVIEW',\n    risk_score: 50,\n    reasons: [reason],\n    must_fix: []\n  };\n}\n\ntry {\n  const content = $json.choices?.[0]?.message?.content || '';\n  const parsed = JSON.parse(content);\n  const decision = (parsed.decision || 'MANUAL_REVIEW').toUpperCase();\n  const allowed = ['ALLOW_DEPLOY', 'MANUAL_REVIEW', 'BLOCK_DEPLOY'];\n  const normalized = {\n    decision: allowed.includes(decision) ? decision : 'MANUAL_REVIEW',\n    risk_score: Number(parsed.risk_score ?? 50),\n    reasons: Array.isArray(parsed.reasons) ? parsed.reasons.slice(0, 10) : ['No reasons provided'],\n    must_fix: Array.isArray(parsed.must_fix) ? parsed.must_fix.slice(0, 10) : []\n  };\n  return [{ json: normalized }];\n} catch (e) {\n  return [{ json: safeDefault('LLM response parse failed') }];\n}"
+      },
+      "id": "Code_Parse",
+      "name": "Parse Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "responseBody": "={{$json}}"
+      },
+      "id": "Respond_200",
+      "name": "Respond Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Receive": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "Unauthorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unauthorized?": {
+      "main": [
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call LLM": {
+      "main": [
+        [
+          {
+            "node": "Parse Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Decision": {
+      "main": [
+        [
+          {
+            "node": "Respond Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1"
+}

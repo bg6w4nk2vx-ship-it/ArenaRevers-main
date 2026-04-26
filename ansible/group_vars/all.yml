@@ -1,0 +1,11 @@
+project_name: arenareserve
+project_root: /opt/arenareserve
+deploy_user: deploy
+
+# Set your own repository URL before production deploy.
+repo_url: https://github.com/your-org/ArenaRevers-main.git
+repo_version: main
+
+compose_file_map:
+  dev: docker-compose.dev.yml
+  prod: docker-compose.yml

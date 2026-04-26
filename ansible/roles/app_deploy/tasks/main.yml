@@ -1,0 +1,39 @@
+---
+- name: Ensure project root exists
+  ansible.builtin.file:
+    path: "{{ project_root }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Clone or update project repository
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ project_root }}"
+    version: "{{ repo_version }}"
+    update: true
+  become_user: "{{ deploy_user }}"
+
+- name: Ensure environment file exists
+  ansible.builtin.stat:
+    path: "{{ project_root }}/.env"
+  register: env_file
+
+- name: Create empty env file for first deploy
+  ansible.builtin.copy:
+    dest: "{{ project_root }}/.env"
+    content: |
+      # Fill production secrets before real usage
+      JWT_SECRET=change-me
+      JWT_REFRESH_SECRET=change-me
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+  when: not env_file.stat.exists
+
+- name: Build and run Docker Compose stack
+  ansible.builtin.command:
+    cmd: docker compose -f {{ compose_file }} up -d --build
+    chdir: "{{ project_root }}"
+  become_user: "{{ deploy_user }}"
