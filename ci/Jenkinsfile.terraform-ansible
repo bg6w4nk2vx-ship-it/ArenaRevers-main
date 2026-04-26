@@ -20,6 +20,7 @@ pipeline {
     TF_IN_AUTOMATION = 'true'
     TF_INPUT = '0'
     AWS_DEFAULT_REGION = 'eu-north-1'
+    AWS_EC2_METADATA_DISABLED = 'true'
     TERRAFORM_VERSION = '1.8.5'
   }
 
@@ -35,6 +36,12 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             def awsCreds = []
+            if (params.AWS_ACCESS_KEY_ID_CRED?.trim() && !params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              error('AWS_ACCESS_KEY_ID_CRED is set but AWS_SECRET_ACCESS_KEY_CRED is empty. Set both credential IDs.')
+            }
+            if (!params.AWS_ACCESS_KEY_ID_CRED?.trim() && params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              error('AWS_SECRET_ACCESS_KEY_CRED is set but AWS_ACCESS_KEY_ID_CRED is empty. Set both credential IDs.')
+            }
             if (params.AWS_ACCESS_KEY_ID_CRED?.trim()) {
               awsCreds << string(credentialsId: params.AWS_ACCESS_KEY_ID_CRED, variable: 'AWS_ACCESS_KEY_ID')
             }
@@ -111,6 +118,19 @@ pipeline {
             def planScript = '''
               set -e
               export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+                echo "ERROR: AWS credentials are not available for Terraform plan."
+                echo "Provide Jenkins credential IDs in parameters AWS_ACCESS_KEY_ID_CRED and AWS_SECRET_ACCESS_KEY_CRED"
+                echo "or configure credentials on Jenkins agent (IAM role / environment)."
+                exit 2
+              fi
+              echo "AWS credentials detected for Terraform plan."
+              if command -v aws >/dev/null 2>&1; then
+                aws sts get-caller-identity >/dev/null
+                echo "AWS STS identity check passed."
+              else
+                echo "AWS CLI not found, skipping STS identity check."
+              fi
               terraform plan -out=tfplan
             '''
 
@@ -135,6 +155,12 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             def awsCreds = []
+            if (params.AWS_ACCESS_KEY_ID_CRED?.trim() && !params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              error('AWS_ACCESS_KEY_ID_CRED is set but AWS_SECRET_ACCESS_KEY_CRED is empty. Set both credential IDs.')
+            }
+            if (!params.AWS_ACCESS_KEY_ID_CRED?.trim() && params.AWS_SECRET_ACCESS_KEY_CRED?.trim()) {
+              error('AWS_SECRET_ACCESS_KEY_CRED is set but AWS_ACCESS_KEY_ID_CRED is empty. Set both credential IDs.')
+            }
             if (params.AWS_ACCESS_KEY_ID_CRED?.trim()) {
               awsCreds << string(credentialsId: params.AWS_ACCESS_KEY_ID_CRED, variable: 'AWS_ACCESS_KEY_ID')
             }
@@ -148,11 +174,37 @@ pipeline {
             def applyScript = '''
               set -e
               export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+                echo "ERROR: AWS credentials are not available for Terraform apply."
+                echo "Provide Jenkins credential IDs in parameters AWS_ACCESS_KEY_ID_CRED and AWS_SECRET_ACCESS_KEY_CRED"
+                echo "or configure credentials on Jenkins agent (IAM role / environment)."
+                exit 2
+              fi
+              echo "AWS credentials detected for Terraform apply."
+              if command -v aws >/dev/null 2>&1; then
+                aws sts get-caller-identity >/dev/null
+                echo "AWS STS identity check passed."
+              else
+                echo "AWS CLI not found, skipping STS identity check."
+              fi
               terraform apply -auto-approve tfplan
             '''
             def destroyScript = '''
               set -e
               export PATH="${WORKSPACE}/.terraform-bin:$PATH"
+              if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+                echo "ERROR: AWS credentials are not available for Terraform destroy."
+                echo "Provide Jenkins credential IDs in parameters AWS_ACCESS_KEY_ID_CRED and AWS_SECRET_ACCESS_KEY_CRED"
+                echo "or configure credentials on Jenkins agent (IAM role / environment)."
+                exit 2
+              fi
+              echo "AWS credentials detected for Terraform destroy."
+              if command -v aws >/dev/null 2>&1; then
+                aws sts get-caller-identity >/dev/null
+                echo "AWS STS identity check passed."
+              else
+                echo "AWS CLI not found, skipping STS identity check."
+              fi
               terraform destroy -auto-approve
             '''
 
