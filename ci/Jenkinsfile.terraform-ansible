@@ -29,7 +29,7 @@ pipeline {
     stage('Terraform Init') {
       steps {
         dir("terraform/${params.TERRAFORM_LAB}") {
-          sh 'terraform init -input=false'
+          sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light init -input=false'
         }
       }
     }
@@ -42,9 +42,9 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             if (params.TF_ACTION == 'destroy') {
-              sh 'terraform plan -destroy -out=tfplan'
+              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light plan -destroy -out=tfplan'
             } else {
-              sh 'terraform plan -out=tfplan'
+              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light plan -out=tfplan'
             }
           }
         }
@@ -60,9 +60,9 @@ pipeline {
         dir("terraform/${params.TERRAFORM_LAB}") {
           script {
             if (params.TF_ACTION == 'destroy') {
-              sh 'terraform destroy -auto-approve'
+              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light destroy -auto-approve'
             } else {
-              sh 'terraform apply -auto-approve tfplan'
+              sh 'docker run --rm -v "$(pwd):/work" -w /work hashicorp/terraform:light apply -auto-approve tfplan'
             }
           }
         }
